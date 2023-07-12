@@ -1,0 +1,324 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+      <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.3/dist/tailwind.min.css" rel="stylesheet">
+    <title>Vocabulary Trainer By Dolev .T.</title>
+    
+    <style>
+        /* ... existing styles ... */
+
+		.slow-fade-out {
+            transition: opacity 1s;
+            opacity: 0;
+        }
+        /* Styles for TTS elements */
+        .tts-container {
+            margin-top: 15px;
+        }
+
+        .tts-container label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .tts-container select {
+            width: 100%;
+            height: 30px;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+    <div id="app" class="container mx-auto p-4">
+       <div class="mb-4">
+            <input type="text" id="listName" class="border-2 border-gray-300 rounded px-2 mr-2" placeholder="Word List name">
+            <button id="saveButton" class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded" onclick="saveList();">Save</button>
+            <button id="resetButton" class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded" onclick="resetCount();">Reset Count</button>
+            <button id="loadButton" class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded" onclick="loadList();">Load</button>
+            <button id="deleteButton" class="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded" onclick="deleteList();">Delete</button>
+            <div id="savedLists" class="mt-2"></div>
+        </div>
+        <div class="mb-4">
+            <textarea id="wordList" class="w-full h-64 border-2 border-gray-300 rounded p-2" placeholder="Enter your list here in this format:&#10 1.example &#10 2.example ..."></textarea>
+        </div>
+        <div>
+            <button id="playButton" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded" onclick="startPlay();">Play</button>
+        </div>
+        <div class="mt-4">
+            <label class="text-lg">Text-to-Speech:</label>
+            <input type="checkbox" id="ttsCheckbox"> Enable Text-to-Speech
+            <div id="ttsContainer" class="tts-container" style="display: none;">
+                <label>Select Voice:</label>
+                <select id="ttsVoiceSelect"></select>
+            </div>
+        </div>
+		<div class="mt-4">
+			<label class="text-lg">Number of repetitions:</label>
+			<input type="number" id="ttsRepetitions" min="1" value="1" class="border-2 border-gray-300 px-2">
+		</div>
+        <div class="mt-4">
+            <label for="timer" class="text-lg">Word Switch time (Default: 1 Second): </label>
+            <input type="number" id="minutes" placeholder="minutes" min="0" class="border-2 border-gray-300 px-2 mr-2">
+            <input type="number" id="seconds" placeholder="seconds" min="1" class="border-2 border-gray-300 px-2">
+        </div>
+        <div class="mt-4">
+         <label for="sound" class="text-lg"><a href="https://mixkit.co/free-sound-effects/" target="_blank">Alert Tone For Word Swap</a>: </label>
+<input type="file" id="sound" class="border-2 border-gray-300 px-2" accept="audio/*">
+<audio id="defaultSound" src="https://freesound.org/data/previews/495/495895_8830646-lq.mp3"></audio>
+<div class="mt-4">
+    <label class="text-lg">Enable Sound Effects:</label>
+    <input type="checkbox" id="enableSFX" checked>
+</div>
+        </div>
+       <h2 class="text-xl mt-6 mb-3">
+    <a href="https://www.youtube.com/watch?v=a3Z7zEc7AXQ" target="_blank" rel="noopener noreferrer">Legendary Vocabulary Trainer Made By Dolev.T ❤</a>
+</h2>
+
+        <p id="currentWord" class="text-2xl text-gray-700"></p>
+    </div>
+    <div id="stopScreen" class="hidden bg-white min-h-screen flex items-center justify-center flex-col">
+        <p id="currentWordCenter" class="text-2xl text-gray-700 mb-6"></p>
+        <div class="flex">
+            <button id="backButton" class="bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded mr-2" onclick="goBack();">Back</button>
+            <button id="stopButton" class="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded" onclick="stopPlay();">Stop</button>
+            <button id="nextButton" class="bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded ml-2" onclick="goNext();">Next</button>
+        </div>
+    </div>
+
+    <script>
+        let wordIndex = -1;
+let wordList = [];
+let playing = false;
+let intervalId;
+let soundFile;
+let audio; // Declare audio here
+let defaultSound = document.getElementById("defaultSound");
+
+        const startPlay = () => {
+            const list = document.getElementById("wordList").value;
+            wordList = list.split(/\n(?=\d+\.)/).map(word => word.replace(/^\d+\.\s*/, '')).filter(word => word.trim() !== '');
+
+            if (wordList.length === 0) {
+                alert("Please enter a valid list.");
+                return;
+            }
+            playing = true;
+            document.getElementById("app").classList.add("slow-fade-out");
+            setTimeout(() => {
+                document.getElementById("app").classList.add("hidden");
+                document.getElementById("stopScreen").classList.remove("hidden");
+            }, 1000);
+            updateWord();
+            setNewInterval();
+            const currentListName = document.getElementById("listName").value || 'default';
+            localStorage.setItem('wordIndex-' + currentListName, wordIndex);
+        };
+
+        const setNewInterval = () => {
+            clearInterval(intervalId);
+            let minutes = parseInt(document.getElementById("minutes").value) || 0;
+            let seconds = parseInt(document.getElementById("seconds").value) || 1;
+            intervalId = setInterval(() => {
+                goNext();
+            }, (minutes * 60 + seconds) * 1000);
+        };
+
+        const stopPlay = () => {
+            playing = false;
+			clearInterval(intervalId);
+    synth.cancel(); // Stop any ongoing TTS
+    if (audio) {
+        audio.pause(); // Stop any ongoing audio
+        audio.currentTime = 0; // Reset the audio playback
+    }
+    document.getElementById("stopScreen").classList.add("hidden");
+    document.getElementById("app").classList.remove("slow-fade-out");
+    document.getElementById("app").classList.remove("hidden");
+
+    const currentListName = document.getElementById("listName").value || 'default';
+    localStorage.setItem('wordIndex-' + currentListName, wordIndex);
+};
+
+      const updateWord = () => {
+    let currentWordText = (wordIndex + 1) + '. ' + wordList[wordIndex].trim();
+    document.getElementById("currentWordCenter").innerText = currentWordText;
+    playSound();
+};
+
+const goBack = () => {
+    wordIndex = wordIndex === 0 ? wordList.length - 1 : wordIndex - 1;
+    updateWord();
+    setNewInterval();
+};
+
+const goNext = () => {
+    wordIndex = wordIndex === wordList.length - 1 ? 0 : wordIndex + 1;
+    updateWord();
+    setNewInterval();
+};
+
+
+
+
+        
+        const saveList = () => {
+            const listName = document.getElementById("listName").value || 'default';
+            localStorage.setItem('list-' + listName, document.getElementById("wordList").value);
+            localStorage.setItem('wordIndex-' + listName, wordIndex);
+            alert("List saved as: " + listName);
+            displaySavedLists();
+        };
+
+        const loadList = (listName) => {
+            listName = listName || document.getElementById("listName").value || 'default';
+            const savedList = localStorage.getItem('list-' + listName);
+            if (savedList) {
+                document.getElementById("wordList").value = savedList;
+                wordIndex = parseInt(localStorage.getItem('wordIndex-' + listName)) || 0;
+                alert("List loaded: " + listName);
+            } else {
+                alert("No list found with the name: " + listName);
+            }
+        };
+
+        const deleteList = () => {
+            const listName = document.getElementById("listName").value || 'default';
+            if (localStorage.getItem('list-' + listName)) {
+                localStorage.removeItem('list-' + listName);
+                localStorage.removeItem('wordIndex-' + listName);
+                alert("List deleted: " + listName);
+                displaySavedLists();
+            } else {
+                alert("No list found with the name: " + listName);
+            }
+        };
+
+        const resetCount = () => {
+            wordIndex = 0;
+            localStorage.setItem('wordIndex', wordIndex);
+            alert("List count reset.");
+        };
+
+      
+
+      function displaySavedLists() {
+    // Get the div where we will display the saved lists
+    const savedListsDiv = document.getElementById('savedLists');
+
+    // Get all the keys in local storage
+    const localStorageKeys = Object.keys(localStorage);
+
+    // Filter the keys to get only the ones that are saved lists
+    const listKeys = localStorageKeys.filter(key => key.startsWith('list-'));
+
+    // Clear the current contents of the saved lists div
+    savedListsDiv.innerHTML = '';
+
+    // For each saved list, create a new paragraph and add it to the saved lists div
+    for (let listKey of listKeys) {
+        let paragraph = document.createElement('p');
+        paragraph.textContent = listKey.replace('list-', '');
+        paragraph.style.cursor = 'pointer'; // make it look clickable
+        paragraph.onclick = () => loadList(paragraph.textContent); // load the list when clicked
+        savedListsDiv.appendChild(paragraph);
+    }
+}
+
+displaySavedLists(); // Now that the function is defined, you can call it
+
+// Variables for TTS
+let synth = window.speechSynthesis;
+let ttsCheckbox = document.getElementById('ttsCheckbox');
+let ttsContainer = document.getElementById('ttsContainer');
+let ttsVoiceSelect = document.getElementById('ttsVoiceSelect');
+let voices = [];
+
+        // Function to populate voices
+        function populateVoices() {
+    voices = synth.getVoices();
+    if (voices.length === 0) {
+        window.setTimeout(populateVoices, 100);
+        return;
+    }
+    for(let voice of voices){
+        let option = document.createElement('option');
+        option.textContent = voice.name + ' (' + voice.lang + ')';
+        option.setAttribute('data-lang', voice.lang);
+        option.setAttribute('data-name', voice.name);
+        ttsVoiceSelect.appendChild(option);
+    }
+}
+
+
+        // Event listener for checkbox
+        ttsCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                ttsContainer.style.display = 'block';
+                populateVoices();
+            } else {
+                ttsContainer.style.display = 'none';
+            }
+        });
+
+        // Update the playSound function
+       let soundLoading = false;
+
+const playSound = () => {
+    const repetitions = parseInt(document.getElementById('ttsRepetitions').value) || 1;
+    soundFile = document.getElementById("sound").files[0];
+
+    if (document.getElementById('enableSFX').checked && soundFile) { // Check if the SFX is enabled and a sound file is present
+        let reader = new FileReader();
+        reader.onload = (e) => {
+            audio = new Audio(e.target.result); // Set audio
+            audio.onended = playTTS; // Set TTS to play when audio ends
+            audio.play();
+        };
+        reader.readAsDataURL(soundFile);
+    } else if (document.getElementById('enableSFX').checked && !soundFile) { // Check if the SFX is enabled but no sound file is present
+        // No custom sound file has been chosen, play TTS immediately
+        playTTS();
+    } else if (!document.getElementById('enableSFX').checked) { // If no SFX, play TTS immediately
+        playTTS();
+    }
+};
+
+let repetitions;
+let currentRepetition = 0;
+
+const playTTS = () => {
+    repetitions = parseInt(document.getElementById('ttsRepetitions').value) || 1;
+
+    if (ttsCheckbox.checked) {
+        const utterThis = new SpeechSynthesisUtterance();
+        const selectedOption = ttsVoiceSelect.selectedOptions[0].getAttribute('data-name');
+        
+        for (let voice of voices) {
+            if (voice.name === selectedOption) {
+                utterThis.voice = voice;
+            }
+        }
+
+        utterThis.text = wordList[wordIndex];
+        utterThis.onend = repeatTTS; // Repeat the TTS when it ends
+        synth.speak(utterThis);
+    }
+};
+
+const repeatTTS = () => {
+    currentRepetition++;
+    if (currentRepetition < repetitions) {
+        playTTS(); // Repeat the TTS for the current word
+    } else {
+        currentRepetition = 0; // Reset the counter
+    }
+};
+
+
+        // Event listeners for synth
+        synth.addEventListener('voiceschanged', populateVoices);
+    </script>
+</body>
+</html>
